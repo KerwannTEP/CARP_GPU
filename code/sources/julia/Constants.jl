@@ -2,7 +2,7 @@
 # Useful constants
 ##################################################
 
-using SpecialFunctions
+# using SpecialFunctions
 
 # Numerical Constants
 # Calculation done with with Julia

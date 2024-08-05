@@ -1,7 +1,73 @@
-using HypergeometricFunctions
-using SpecialFunctions
-using StaticArrays # To have access to static arrays
-using Interpolations # To have access to interpolation functions
+# using HypergeometricFunctions
+# using SpecialFunctions
+# using StaticArrays # To have access to static arrays
+# using Interpolations # To have access to interpolation functions
+
+
+
+
+# https://cuda.juliagpu.org/stable/tutorials/custom_structs/
+import Adapt 
+
+struct HG_Interpolate{T}
+
+    tabxInt::T
+    tabHG1Int::T
+    tabHG2Int::T 
+
+end
+Adapt.@adapt_structure HG_Interpolate
+
+function HG_Interpolate_init_GPU(nbxInt::Int64=1000)
+
+    xminInt = 0.0
+    xmaxInt = 1.0
+    #####
+    rangexInt = range(xminInt,length=nbxInt,xmaxInt)
+    tabxInt = collect(rangexInt)
+    tabHG1Int = zeros(Float64,nbxInt)
+    tabHG2Int = zeros(Float64,nbxInt)
+
+    #####
+    for indx=2:nbxInt-1
+        xloc = tabxInt[indx]
+        hg1loc = _₂F₁(qCalc/2,qCalc-3.5,1.0,xloc)
+        hg2loc = _₂F₁(qCalc/2,qCalc/2,4.5-qCalc/2,xloc)
+        tabHG1Int[indx] = hg1loc
+        tabHG2Int[indx] = hg2loc
+    end
+    # x=0
+    tabHG1Int[1] = 1.0
+    tabHG2Int[1] = 1.0
+
+    # x=1
+    tabHG1Int[nbxInt] = gamma(4.5-1.5*qCalc)/(gamma(1-qCalc/2)*gamma(4.5-qCalc))
+    tabHG2Int[nbxInt] = gamma(4.5-qCalc/2)*gamma(4.5-1.5*qCalc)/(gamma(4.5-qCalc)*gamma(4.5-qCalc))
+
+    return HG_Interpolate(CuArray(tabxInt), CuArray(tabHG1Int), CuArray(tabHG2Int))
+
+end
+
+function H_1(hg_int::HG_Interpolate, x::Float64)
+
+    i = searchsortedfirst(hg_int.tabxInt, x)
+    i = clamp(i, firstindex(hg_int.tabHG1Int), lastindex(hg_int.tabHG1Int))
+    @inbounds hg_int.tabHG1Int[i]
+
+end
+
+function H_2(hg_int::HG_Interpolate, x::Float64)
+
+    i = searchsortedfirst(hg_int.tabxInt, x)
+    i = clamp(i, firstindex(hg_int.tabHG2Int), lastindex(hg_int.tabHG2Int))
+    @inbounds hg_int.tabHG2Int[i]
+
+end
+
+const hg_int_default = HG_Interpolate_init_GPU()
+
+
+
 
 ##################################################
 # Distribution function in (E,L) for a Plummer sphere
@@ -207,63 +273,3 @@ end
 
 
 
-
-# https://cuda.juliagpu.org/stable/tutorials/custom_structs/
-import Adapt 
-
-struct HG_Interpolate{T}
-
-    tabxInt::T
-    tabHG1Int::T
-    tabHG2Int::T 
-
-end
-Adapt.@adapt_structure HG_Interpolate
-
-function HG_Interpolate_init_GPU(nbxInt::Int64=1000)
-
-    xminInt = 0.0
-    xmaxInt = 1.0
-    #####
-    rangexInt = range(xminInt,length=nbxInt,xmaxInt)
-    tabxInt = collect(rangexInt)
-    tabHG1Int = zeros(Float64,nbxInt)
-    tabHG2Int = zeros(Float64,nbxInt)
-
-    #####
-    for indx=2:nbxInt-1
-        xloc = tabxInt[indx]
-        hg1loc = _₂F₁(qCalc/2,qCalc-3.5,1.0,xloc)
-        hg2loc = _₂F₁(qCalc/2,qCalc/2,4.5-qCalc/2,xloc)
-        tabHG1Int[indx] = hg1loc
-        tabHG2Int[indx] = hg2loc
-    end
-    # x=0
-    tabHG1Int[1] = 1.0
-    tabHG2Int[1] = 1.0
-
-    # x=1
-    tabHG1Int[nbxInt] = gamma(4.5-1.5*qCalc)/(gamma(1-qCalc/2)*gamma(4.5-qCalc))
-    tabHG2Int[nbxInt] = gamma(4.5-qCalc/2)*gamma(4.5-1.5*qCalc)/(gamma(4.5-qCalc)*gamma(4.5-qCalc))
-
-    return HG_Interpolate(CuArray(tabxInt), CuArray(tabHG1Int), CuArray(tabHG2Int))
-
-end
-
-function H_1(hg_int::HG_Interpolate, x::Float64)
-
-    i = searchsortedfirst(hg_int.tabxInt, x)
-    i = clamp(i, firstindex(hg_int.tabHG1Int), lastindex(hg_int.tabHG1Int))
-    @inbounds hg_int.tabHG1Int[i]
-
-end
-
-function H_2(hg_int::HG_Interpolate, x::Float64)
-
-    i = searchsortedfirst(hg_int.tabxInt, x)
-    i = clamp(i, firstindex(hg_int.tabHG2Int), lastindex(hg_int.tabHG2Int))
-    @inbounds hg_int.tabHG2Int[i]
-
-end
-
-const hg_int_default = HG_Interpolate_init_GPU()

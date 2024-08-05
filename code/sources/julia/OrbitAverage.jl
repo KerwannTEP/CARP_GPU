@@ -12,7 +12,7 @@ function orbitAverageEnergyCoeffs(sp::Float64, sa::Float64, cosI::Float64,
     sma, ecc = sma_ecc_from_sp_sa(sp,sa)
     sinI = sqrt(abs(1.0 - cosI^2))
 
-    nbThreadsPerBlocks = 1024
+    nbThreadsPerBlocks = 384 #1024
     nint = nbAvr*nbw*nbvartheta*nbphi 
     numblocks = min(40, ceil(Int64, nint/nbThreadsPerBlocks))
 
@@ -29,7 +29,9 @@ function orbitAverageEnergyCoeffs(sp::Float64, sa::Float64, cosI::Float64,
     list_coeffs_block = zeros(Float64, numblocks, 9)
     dev_list_coeffs_block = CuArray(list_coeffs_block)
 
-    @cuda threads=nbThreadsPerBlocks blocks=numblocks orbit_average!(dev_list_coeffs_block, E, L, Lz, cosI, sinI, sma, ecc, sp, sa,
+    # https://cuda.juliagpu.org/stable/development/kernel/
+    # test q=0
+    @cuda threads=nbThreadsPerBlocks blocks=numblocks shmem=nbThreadsPerBlocks*9*sizeof(Float64) orbit_average!(dev_list_coeffs_block, E, L, Lz, _tFq0, cosI, sinI, sma, ecc, sp, sa, Theta,
                                                                     m_field, alpha, nbAvr, nbw, nbvartheta,
                                                                     nbphi, nint, nbThreadsPerBlocks, m_test, hg_int)
 
@@ -50,7 +52,7 @@ function orbitAverageEnergyCoeffs(sp::Float64, sa::Float64, cosI::Float64,
     end
     
 
-    halfperiod_threads = [0.0 for it=Threads.nthreads()]
+    halfperiod_threads = zeros(Float64, Threads.nthreads())
 
     Threads.@threads for iu=1:nbAvr
 
@@ -59,7 +61,6 @@ function orbitAverageEnergyCoeffs(sp::Float64, sa::Float64, cosI::Float64,
         uloc = -1+2*(iu-0.5)/nbAvr
         jac_loc = Theta(uloc,sp,sa)
 
-        halfperiod += jac_loc
         
         halfperiod_threads[ithread] += jac_loc
 
@@ -73,6 +74,7 @@ function orbitAverageEnergyCoeffs(sp::Float64, sa::Float64, cosI::Float64,
 
     end
 
+    println(halfperiod)
 
     avrDE /= halfperiod
     avrDL /= halfperiod

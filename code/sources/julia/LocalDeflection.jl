@@ -1,17 +1,18 @@
-function orbit_average!(list_coeffs_block::CuDeviceArray{Float64}, E::Float64, L::Float64, Lz::Float64, cosI::Float64, 
-                        sinI::Float64, sma::Float64, ecc::Float64, sp::Float64, sa::Float64,
-                        m_field::Float64, alpha::Float64, nbAvr::Float64, nbw::Int64, nbvartheta::Int64,
-                        nbphi::Int64, nint::Int64, nbThreadsPerBlocks::Int64, m_test::Float64, hg_int::HG_Interpolate)
+function orbit_average!(list_coeffs_block::CuDeviceArray{T}, E::Float64, L::Float64, Lz::Float64, dev_F, cosI::Float64, 
+                        sinI::Float64, sma::Float64, ecc::Float64, sp::Float64, sa::Float64, fTheta, 
+                        m_field::Float64, alpha::Float64, nbAvr::Int64, nbw::Int64, nbvartheta::Int64,
+                        nbphi::Int64, nint::Int64, nbThreadsPerBlocks::Int64, m_test::Float64, hg_int::HG_Interpolate) where T
 
 
     index = 1 + (threadIdx().x - 1) + (blockIdx().x - 1) * blockDim().x
     tid = threadIdx().x
 
-    # nbv = nbw*nbvartheta*nbphi 
-    # index - 1 = iu - 1 + (iw-1)*(nbv)
+    nbv = nbw*nbvartheta*nbphi 
 
-    list_coeffs_threads = CuStaticSharedArray(Float64, (nbThreadsPerBlocks, 9))
-    
+    # https://cuda.juliagpu.org/stable/development/kernel/
+    # list_coeffs_threads = CuStaticSharedArray(T, (512, 9))
+    list_coeffs_threads = CuDynamicSharedArray(T, (nbThreadsPerBlocks, 9))
+
 
     list_coeffs_threads[tid,1] = 0.0
     list_coeffs_threads[tid,2] = 0.0
@@ -27,36 +28,55 @@ function orbit_average!(list_coeffs_block::CuDeviceArray{Float64}, E::Float64, L
     pref = 2.0*pi^2/(nbw*nbvartheta*nbphi)
     pref *= 2.0*pi*_G^2*logCoulomb
 
-    
+    # @assert (0 < index && index <= nint)
 
-    while (index < nint)
+    while (index <= nint)
 
 
         # Velocity indices 
+        # index - 1 = iu - 1 + (iv-1)*(nbv)
 
-        iv = floor(Int64, (index-1)/(nbw*nbvartheta*nbphi)) + 1
-        iu = index - (iv-1)*(nbw*nbvartheta*nbphi)
+        # Decomposition fails
+
+        # iv = floor(Int64, (index-1)/(nbw*nbvartheta*nbphi)) + 1
+        # iu = index - (iv-1)*(nbw*nbvartheta*nbphi)
+
+        iv = div(index-1,nbv) + 1
+        iu = index - (iv-1)*nbv
+
+
+        # @assert (0 < iu && iu <= nbAvr)
 
         # v = (w,theta,phi)
         # iv-1 = iw-1 + (iang-1)*(nbvartheta*nbphi)
         iang = floor(Int64, (iv-1)/(nbvartheta*nbphi)) + 1
         iw = iv - (iang-1)*(nbvartheta*nbphi)
 
-        # iang - 1 = iphi - 1 + (itheta-1)*nbvartheta
-        itheta = floor(Int64, (iang-1)/nbvartheta) + 1
-        iphi = iang - (itheta-1)*nbvartheta
+        # iang - 1 = iphi - 1 + (ivartheta-1)*nbvartheta
+        ivartheta = floor(Int64, (iang-1)/nbvartheta) + 1
+        iphi = iang - (ivartheta-1)*nbvartheta
 
 
         # Radial index + radial average
-        
-        uloc = -1+2*(iu-0.5)/nbAvr
-        sloc = s_from_u_sma_ecc(uloc,sma,ecc)
-        rloc = r_from_s(sloc)
-        jac_loc = Theta(uloc,sp,sa)
 
-        vr = sqrt(2.0*abs(E - psiEff(rloc,L)))
+        
+
+        uloc = -1+2*(iu-0.5)/nbAvr
+
+        
+
+        fu = uloc * (1.5 - 0.5*uloc^2)
+        sloc = sma * (1.0 + ecc * fu)
+        rloc = sqrt(abs(sloc^2 - 1.0))
+        jac_loc = fTheta(-0.1,sp,sa) # fTheta(uloc,sp,sa)
+
+        psir = -1.0/sqrt(1.0+rloc^2)
+        psieffr = psir + L^2/(2.0*rloc^2)
+
+        vr = sqrt(2.0*abs(E - psieffr))
         vt = L/rloc
-        v = sqrt(vr^2 + vt^2)
+        vSq = vr^2 + vt^2
+        v = sqrt(vSq)
 
         vr_v = vr/v
         vt_v = vt/v
@@ -67,8 +87,10 @@ function orbit_average!(list_coeffs_block::CuDeviceArray{Float64}, E::Float64, L
         phi = 2.0*pi*(iphi-0.5)/nbphi
 
 
-        sinvartheta, cosvartheta = sincos(vartheta)
-        sinphi, cosphi = sincos(phi)
+        sinvartheta = sin(vartheta)
+        cosvartheta = cos(vartheta)
+        sinphi = sin(phi)
+        cosphi = cos(phi)
         wmax = v*cosvartheta + sqrt(abs(vSq*cosvartheta^2 - 2.0*E))
 
         w = wmax*(iw-0.5)/nbw
@@ -83,9 +105,11 @@ function orbit_average!(list_coeffs_block::CuDeviceArray{Float64}, E::Float64, L
         v2p = -w2
         v3p = -w3
 
-        Lp = r * sqrt(v2p^2 + (vr_v*v3p-vt_v*v1p)^2 )
+        Lp = rloc * sqrt(abs(v2p^2 + (vr_v*v3p-vt_v*v1p)^2 ))
 
-        Ftot = _F(hg_int,Ep,Lp)
+        # Ftot = dev_F(hg_int,-Ep,Lp)
+        #Ftot = dev_F(Ep,Lp) 
+        Ftot = dev_F(0.1,Lp) 
 
         nu = -(v1p*vt_v-v3p*vr_v)*cosI
 
@@ -110,17 +134,22 @@ function orbit_average!(list_coeffs_block::CuDeviceArray{Float64}, E::Float64, L
         dvPar2 = 2.0*pref * m_field * sinvartheta^3* wmax * w*Ftot * (1.0 + alpha*sum_g)
         dvPerp2 = 2.0*pref * m_field * sinvartheta*(1.0+cosvartheta^2)* wmax * w*Ftot * (1.0 + alpha*sum_g)
         sinSqdvPerSq = 2.0*pref * m_field * sinvartheta*(1.0+cosvartheta^2)* wmax * w*Ftot * (0.5 + alpha*sum_sinSqg)
+     
+        # dvPar = 1.0
+        # dvPar2 = 1.0
+        # dvPerp2 = 1.0
+        # sinSqdvPerSq = 1.0
 
 
         list_coeffs_threads[tid,1] += jac_loc * (0.5*dvPar2 + 0.5*dvPerp2 + v*dvPar)
-        list_coeffs_threads[tid,2] += jac_loc * (r*vt_v*dvPar + 0.25*(r/vt)*dvPerp2)
+        list_coeffs_threads[tid,2] += jac_loc * (rloc*vt_v*dvPar + 0.25*(rloc/vt)*dvPerp2)
         list_coeffs_threads[tid,3] += jac_loc * (v^2* dvPar2)
-        list_coeffs_threads[tid,4] += jac_loc * (r*vt*dvPar2)
-        list_coeffs_threads[tid,5] += jac_loc * (r^2*vt_v^2*dvPar2 + 0.5*r^2*vr_v^2*dvPerp2)
-        list_coeffs_threads[tid,6] += jac_loc * (r*vt_v*cosI*dvPar)
-        list_coeffs_threads[tid,7] += jac_loc * (r^2*cosI^2*(vt_v^2*dvPar2 + 0.5*vr_v^2*dvPerp2) + 0.5*r^2*sinSqdvPerSq*sinI^2)
-        list_coeffs_threads[tid,8] += jac_loc * (r^2*cosI*(vt_v^2*dvPar2 + 0.5*vr_v^2*dvPerp2))
-        list_coeffs_threads[tid,9] += jac_loc * (r*vt*cosI*dvPar2)
+        list_coeffs_threads[tid,4] += jac_loc * (rloc*vt*dvPar2)
+        list_coeffs_threads[tid,5] += jac_loc * (rloc^2*vt_v^2*dvPar2 + 0.5*rloc^2*vr_v^2*dvPerp2)
+        list_coeffs_threads[tid,6] += jac_loc * (rloc*vt_v*cosI*dvPar)
+        list_coeffs_threads[tid,7] += jac_loc * (rloc^2*cosI^2*(vt_v^2*dvPar2 + 0.5*vr_v^2*dvPerp2) + 0.5*rloc^2*sinSqdvPerSq*sinI^2)
+        list_coeffs_threads[tid,8] += jac_loc * (rloc^2*cosI*(vt_v^2*dvPar2 + 0.5*vr_v^2*dvPerp2))
+        list_coeffs_threads[tid,9] += jac_loc * (rloc*vt*cosI*dvPar2)
 
 
         # Increment index
@@ -132,7 +161,7 @@ function orbit_average!(list_coeffs_block::CuDeviceArray{Float64}, E::Float64, L
     sync_threads()
 
     # Reduction
-    i = blockDim().x/2;
+    i = div(blockDim().x,2);
 
     while (i != 0)
         if (tid < i)
@@ -146,7 +175,7 @@ function orbit_average!(list_coeffs_block::CuDeviceArray{Float64}, E::Float64, L
             list_coeffs_threads[tid,8] += list_coeffs_threads[tid+i,8]
             list_coeffs_threads[tid,9] += list_coeffs_threads[tid+i,9]
         end
-        i /= 2
+        i =  div(i,2)
         sync_threads()
     end
 

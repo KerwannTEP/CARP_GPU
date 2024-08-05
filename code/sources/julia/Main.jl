@@ -1,8 +1,15 @@
+
+println("Compiling libraries...")
+
+using HypergeometricFunctions
+using SpecialFunctions
+using StaticArrays # To have access to static arrays
+using Interpolations # To have access to interpolation functions
+using ArgParse
+
 println("Compiling CUDA...")
 
 @time using CUDA 
-
-println("Compiling other libraries...")
 
 
 include("Args.jl") # Parsing the command-line
