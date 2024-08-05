@@ -47,5 +47,6 @@ include("EffectiveAnomaly.jl")
 include("OrbitParameters.jl")
 include("Bath.jl")
 include("LocalDeflection.jl")
+include("Grad_Jr.jl")
 include("OrbitAverage.jl")
 

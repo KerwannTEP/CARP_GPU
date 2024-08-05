@@ -7,38 +7,38 @@ using Interpolations # To have access to interpolation functions
 # Distribution function in (E,L) for a Plummer sphere
 ##################################################
 
-function _Hq1(x::Float64, q::Float64=qCalc)
+function _Hq1(hg_int::HG_Interpolate, x::Float64, q::Float64=qCalc)
     if (x <= 1)
         pref = 1/(GAMMA_ca)
-        HG   = H_1(x)
+        HG   = H_1(hg_int,x)
         return pref*HG
     else
         pref = 1/(GAMMA_db*GAMMA_bc)
-        HG   = H_2(1/x)
+        HG   = H_2(hg_int,1/x)
         return pref*1/sqrt(x)*HG
     end
 end
 
-function _Hqm6(x::Float64, q::Float64=qCalc)
+function _Hqm6(hg_int::HG_Interpolate, x::Float64, q::Float64=qCalc)
     if (x <= 1)
         pref = 1/(GAMMA_ca)
-        HG   = H_1(x)
+        HG   = H_1(hg_int,x)
         return pref*HG
     else
         pref = 1/(GAMMA_db*GAMMA_bc)
-        HG   = H_2(1/x)
+        HG   = H_2(hg_int,1/x)
         return pref*x^3*HG
     end
 end
 
-function _Hq(x::Float64, q::Float64=qCalc)
+function _Hq(hg_int::HG_Interpolate, x::Float64, q::Float64=qCalc)
     if (x <= 1)
         pref = 1/(GAMMA_ca)
-        HG   = H_1(x)
+        HG   = H_1(hg_int,x)
         return pref*HG
     else
         pref = 1/(GAMMA_db*GAMMA_bc)
-        HG   = H_2(1/x)
+        HG   = H_2(hg_int,1/x)
         return pref*x^(-q/2)*HG
     end
 end
@@ -74,37 +74,37 @@ function _tFq2(tE::Float64, tL::Float64)
 
 end
 
-function _tFq1(tE::Float64, tL::Float64)
+function _tFq1(hg_int::HG_Interpolate, tE::Float64, tL::Float64)
     if (tE < 0.0 || tL < 0.0) # If E or L are negative, the DF vanishes
         return 0.0
     end
     # If E and L are positive
     x = tL^2/(2.0*tE)
     return (3.0*GAMMA_6q/(2.0*(2.0*PI)^(5/2)) *
-               tE*tE*sqrt(tE) * _H(x,1.0))
+               tE*tE*sqrt(tE) * _H(hg_int,x,1.0))
 
 
 end
 
-function _tFqm6(tE::Float64, tL::Float64)
+function _tFqm6(hg_int::HG_Interpolate, tE::Float64, tL::Float64)
     if (tE < 0.0 || tL < 0.0) # If E or L are negative, the DF vanishes
         return 0.0
     end
     # If E and L are positive
     x = tL^2/(2.0*tE)
     return (3.0*GAMMA_6q/(2.0*(2.0*PI)^(5/2)) *
-               tE^2*tE^2*tE^2*tE^2*tE*sqrt(tE) * _H(x,-6.0))
+               tE^2*tE^2*tE^2*tE^2*tE*sqrt(tE) * _H(hg_int,x,-6.0))
 
 end
 
-function _tFq(tE::Float64, tL::Float64)
+function _tFq(hg_int::HG_Interpolate, tE::Float64, tL::Float64)
     if (tE < 0.0 || tL < 0.0) # If E or L are negative, the DF vanishes
         return 0.0
     end
     # If E and L are positive
     x = tL^2/(2.0*tE)
     return (3.0*GAMMA_6q/(2.0*(2.0*PI)^(5/2)) *
-               tE^(3.5-qCalc) * _H(x,qCalc))
+               tE^(3.5-qCalc) * _H(hg_int,x,qCalc))
 
 end
 
@@ -121,10 +121,10 @@ else
     const _tF = _tFq
 end
 
-function _F(E::Float64, L::Float64)
+function _F(hg_int::HG_Interpolate, E::Float64, L::Float64)
     tE = _tE(E)
     tL = _tL(L)
-    DF  = _tF(tE,tL)
+    DF  = _tF(hg_int,tE,tL)
     return _M*_F0*DF
 end
 
@@ -134,15 +134,15 @@ end
 ##################################################
 
 
-function _Frot(E::Float64, L::Float64, Lz::Float64, alpha::Float64=alphaRot)
-    Ftot = _F(E,L)
+function _Frot(hg_int::HG_Interpolate, E::Float64, L::Float64, Lz::Float64, alpha::Float64=alphaRot)
+    Ftot = _F(hg_int,E,L)
     Frot = Ftot*(1.0 + alpha*sign(Lz/L))
     return Frot
 end
 
 # Normalized to M = int dJr dL dcosI _Frot_cosI(Jr,L,cosI)
-function _Frot_cosI(E::Float64, L::Float64, cosI::Float64, alpha::Float64=alphaRot)
-    Ftot = _F(E,L)
+function _Frot_cosI(hg_int::HG_Interpolate, E::Float64, L::Float64, cosI::Float64, alpha::Float64=alphaRot)
+    Ftot = _F(hg_int,E,L)
     Frot = L*Ftot*(1.0 + alpha*sign(cosI))
     return Frot
 end
@@ -160,7 +160,68 @@ end
 # HG2   = _₂F₁(qCalc/2,qCalc/2,4.5-qCalc/2,1) = gamma(4.5-qCalc/2)gamma(4.5-1.5*qCalc)/(gamma(4.5-qCalc)gamma(4.5-qCalc))
 ##################################################
 
-function getHGInt(nbxInt::Int64=1000)
+# function getHGInt(nbxInt::Int64=1000)
+#     xminInt = 0.0
+#     xmaxInt = 1.0
+#     #####
+#     rangexInt = range(xminInt,length=nbxInt,xmaxInt)
+#     tabxInt = collect(rangexInt)
+#     tabHG1Int = zeros(Float64,nbxInt)
+#     tabHG2Int = zeros(Float64,nbxInt)
+
+#     #####
+#     for indx=2:nbxInt-1
+#         xloc = tabxInt[indx]
+#         hg1loc = _₂F₁(qCalc/2,qCalc-3.5,1.0,xloc)
+#         hg2loc = _₂F₁(qCalc/2,qCalc/2,4.5-qCalc/2,xloc)
+#         tabHG1Int[indx] = hg1loc
+#         tabHG2Int[indx] = hg2loc
+#     end
+#     # x=0
+#     tabHG1Int[1] = 1.0
+#     tabHG2Int[1] = 1.0
+
+#     # x=1
+#     tabHG1Int[nbxInt] = gamma(4.5-1.5*qCalc)/(gamma(1-qCalc/2)*gamma(4.5-qCalc))
+#     tabHG2Int[nbxInt] = gamma(4.5-qCalc/2)*gamma(4.5-1.5*qCalc)/(gamma(4.5-qCalc)*gamma(4.5-qCalc))
+#     #####
+#     intHG1 = Interpolations.scale(interpolate(tabHG1Int, BSpline(Cubic(Line(OnGrid())))),rangexInt)
+#     intHG2 = Interpolations.scale(interpolate(tabHG2Int, BSpline(Cubic(Line(OnGrid())))),rangexInt)
+#     #####
+#     return [intHG1, intHG2]
+# end
+
+
+# const tabHyperGeoInt = SVector{2}(getHGInt())
+
+# # HG1   = _₂F₁(qCalc/2,qCalc-3.5,1.0,x)`
+# const H_1 = tabHyperGeoInt[1]
+
+
+
+# # HG2   = _₂F₁(qCalc/2,qCalc/2,4.5-qCalc/2,1/x)`
+# const H_2 = tabHyperGeoInt[2]
+
+
+
+
+
+
+
+# https://cuda.juliagpu.org/stable/tutorials/custom_structs/
+import Adapt 
+
+struct HG_Interpolate{T}
+
+    tabxInt::T
+    tabHG1Int::T
+    tabHG2Int::T 
+
+end
+Adapt.@adapt_structure HG_Interpolate
+
+function HG_Interpolate_init_GPU(nbxInt::Int64=1000)
+
     xminInt = 0.0
     xmaxInt = 1.0
     #####
@@ -184,20 +245,25 @@ function getHGInt(nbxInt::Int64=1000)
     # x=1
     tabHG1Int[nbxInt] = gamma(4.5-1.5*qCalc)/(gamma(1-qCalc/2)*gamma(4.5-qCalc))
     tabHG2Int[nbxInt] = gamma(4.5-qCalc/2)*gamma(4.5-1.5*qCalc)/(gamma(4.5-qCalc)*gamma(4.5-qCalc))
-    #####
-    intHG1 = Interpolations.scale(interpolate(tabHG1Int, BSpline(Cubic(Line(OnGrid())))),rangexInt)
-    intHG2 = Interpolations.scale(interpolate(tabHG2Int, BSpline(Cubic(Line(OnGrid())))),rangexInt)
-    #####
-    return [intHG1, intHG2]
+
+    return HG_Interpolate(CuArray(tabxInt), CuArray(tabHG1Int), CuArray(tabHG2Int))
+
 end
 
+function H_1(hg_int::HG_Interpolate, x::Float64)
 
-const tabHyperGeoInt = SVector{2}(getHGInt())
+    i = searchsortedfirst(hg_int.tabxInt, x)
+    i = clamp(i, firstindex(hg_int.tabHG1Int), lastindex(hg_int.tabHG1Int))
+    @inbounds hg_int.tabHG1Int[i]
 
-# HG1   = _₂F₁(qCalc/2,qCalc-3.5,1.0,x)`
-const H_1 = tabHyperGeoInt[1]
+end
 
+function H_2(hg_int::HG_Interpolate, x::Float64)
 
+    i = searchsortedfirst(hg_int.tabxInt, x)
+    i = clamp(i, firstindex(hg_int.tabHG2Int), lastindex(hg_int.tabHG2Int))
+    @inbounds hg_int.tabHG2Int[i]
 
-# HG2   = _₂F₁(qCalc/2,qCalc/2,4.5-qCalc/2,1/x)`
-const H_2 = tabHyperGeoInt[2]
+end
+
+const hg_int_default = HG_Interpolate_init_GPU()

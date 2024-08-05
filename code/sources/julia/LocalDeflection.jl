@@ -1,7 +1,7 @@
 function orbit_average!(list_coeffs_block::CuDeviceArray{Float64}, E::Float64, L::Float64, Lz::Float64, cosI::Float64, 
                         sinI::Float64, sma::Float64, ecc::Float64, sp::Float64, sa::Float64,
                         m_field::Float64, alpha::Float64, nbAvr::Float64, nbw::Int64, nbvartheta::Int64,
-                        nbphi::Int64, nint::Int64, nbThreadsPerBlocks::Int64, m_test::Float64)
+                        nbphi::Int64, nint::Int64, nbThreadsPerBlocks::Int64, m_test::Float64, hg_int::HG_Interpolate)
 
 
     index = 1 + (threadIdx().x - 1) + (blockIdx().x - 1) * blockDim().x
@@ -85,7 +85,7 @@ function orbit_average!(list_coeffs_block::CuDeviceArray{Float64}, E::Float64, L
 
         Lp = r * sqrt(v2p^2 + (vr_v*v3p-vt_v*v1p)^2 )
 
-        Ftot = _F(Ep,Lp)
+        Ftot = _F(hg_int,Ep,Lp)
 
         nu = -(v1p*vt_v-v3p*vr_v)*cosI
 

@@ -4,7 +4,7 @@
 function orbitAverageEnergyCoeffs(sp::Float64, sa::Float64, cosI::Float64,
                 m_field::Float64, alpha::Float64=alphaRot, nbAvr::Int64=nbAvr_default,
                 nbw::Int64=nbw_default, nbvartheta::Int64=nbvartheta_default, 
-                nbphi::Int64=nbphi_default, m_test::Float64=m_field)
+                nbphi::Int64=nbphi_default, m_test::Float64=m_field, hg_int::HG_Interpolate=hg_int_default)
 
 
     E, L = E_L_from_sp_sa(sp,sa)
@@ -31,7 +31,7 @@ function orbitAverageEnergyCoeffs(sp::Float64, sa::Float64, cosI::Float64,
 
     @cuda threads=nbThreadsPerBlocks blocks=numblocks orbit_average!(dev_list_coeffs_block, E, L, Lz, cosI, sinI, sma, ecc, sp, sa,
                                                                     m_field, alpha, nbAvr, nbw, nbvartheta,
-                                                                    nbphi, nint, nbThreadsPerBlocks, m_test)
+                                                                    nbphi, nint, nbThreadsPerBlocks, m_test, hg_int)
 
     list_coeffs_block = Array(dev_list_coeffs_block)
 
@@ -90,10 +90,38 @@ end
 
 
 
+##################################################
+# Orbit-averaged (Jr,L,Lz)-diffusion coefficients
+##################################################
+
+# Diffusion coefficients (orbit-averaged) in (Jr,L,Lz) space
+function orbitAverageActionCoeffs(Jr::Float64, L::Float64, cosI::Float64, m_field::Float64,
+                                alpha::Float64=alphaRot, nbAvr::Int64=nbAvr_default,
+                                nbw::Int64=nbw_default,
+                                nbvartheta::Int64=nbvartheta_default, nbphi::Int64=nbphi_default,
+                                nbu::Int64=nbu0, m_test::Float64=m_field, hg_int::HG_Interpolate=hg_int_default)
+
+    E = E_from_Jr_L(Jr,L,nbu)
+    if (Jr > 0.0)
+        sp, sa = sp_sa_from_E_L(E,L)
+    else
+        sc = _sc(E/_E0)
+        sp, sa = sc, sc
+    end
+
+    avrDE, avrDL, avrDLz, avrDEE, avrDLL, avrDLzLz, avrDEL, avrDELz, avrDLLz = orbitAverageEnergyCoeffs(sp,sa,cosI,m_field,alpha,nbAvr,nbw,nbvartheta,nbphi,m_test,hg_int)
+
+    dJrdE, dJrdL, d2JrdE2, d2JrdEL, d2JrdL2 = grad_Jr_E_L(E,L,nbu)
+
+    avrDJr = dJrdE*avrDE+dJrdL*avrDL+(1/2)*d2JrdE2*avrDEE+(1/2)*d2JrdL2*avrDLL+d2JrdEL*avrDEL
+    avrDJrJr = dJrdE^2*avrDEE+dJrdL^2*avrDLL+2*dJrdE*dJrdL*avrDEL
+    avrDJrL = dJrdE*avrDEL+dJrdL*avrDLL
+    avrDJrLz = dJrdE*avrDELz+dJrdL*avrDLLz
+
+    return avrDJr, avrDL, avrDLz, avrDJrJr, avrDLL, avrDLzLz, avrDJrL, avrDJrLz, avrDLLz
+end
 
 
-
-    
 
 
 
