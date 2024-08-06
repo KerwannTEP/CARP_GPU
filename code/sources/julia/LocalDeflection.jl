@@ -25,6 +25,8 @@ function orbit_average!(list_coeffs_block::CuDeviceArray{T}, E::Float64, L::Floa
     list_coeffs_threads[tid,9] = 0.0
 
     
+
+    
     pref = 2.0*pi^2/(nbw*nbvartheta*nbphi)
     pref *= 2.0*pi*_G^2*logCoulomb
 
@@ -55,26 +57,18 @@ function orbit_average!(list_coeffs_block::CuDeviceArray{T}, E::Float64, L::Floa
 
         # Radial index + radial average
 
-        
-
         uloc = -1+2*(iu-0.5)/nbAvr
-
-
-        fu = uloc * (1.5 - 0.5*uloc^2)
-        sloc = sma * (1.0 + ecc * fu)
-        rloc = sqrt(abs(sloc^2 - 1.0))
+        sloc = s_from_u_sma_ecc(uloc,sma,ecc)
+        rloc = r_from_s(sloc)
         jac_loc = Theta(uloc,sp,sa)
-
-        # psir = -1.0/sqrt(1.0+rloc^2)
-        # psieffr = psir + L^2/(2.0*rloc^2)
 
         vr = sqrt(2.0*abs(E - psiEff(rloc,L)))
         vt = L/rloc
         vSq = vr^2 + vt^2
         v = sqrt(vSq)
-
         vr_v = vr/v
         vt_v = vt/v
+
 
         # Velocity integral + physical angle average
 
@@ -102,10 +96,6 @@ function orbit_average!(list_coeffs_block::CuDeviceArray{T}, E::Float64, L::Floa
 
         Lp = rloc * sqrt(abs(v2p^2 + (vr_v*v3p-vt_v*v1p)^2 ))
 
-
-        # Ftot = dev_F(-Ep,Lp) 
-        # Ftot = dev_F(-Ep,Lp) 
-
         Ftot = _F(hg_int,Ep,Lp)
 
 
@@ -116,15 +106,16 @@ function orbit_average!(list_coeffs_block::CuDeviceArray{T}, E::Float64, L::Floa
 
         if (v2p == 0.0)
             sum_g = sign(-nu)
-            sum_sinSqg = 0.5*sign(-nu)
+            sum_sinSqg = 0.5*sum_g#sign(-nu)
         else
             mu = nu/(v2p*sinI)
             if (abs(mu) >= 1.0)
                 sum_g = sign(-nu)
-                sum_sinSqg = sign(-nu)/2.0
+                sum_sinSqg = 0.5*sum_g#sign(-nu)/2.0
             else
                 sum_g = -2.0*asin(nu/(abs(v2p)*sinI))/pi
-                sum_sinSqg = 0.5*(-2.0*asin(nu/(abs(v2p)*sinI))/pi + 2.0/pi*(nu/(abs(v2p)*sinI))*sqrt(1.0-(nu/(abs(v2p)*sinI))^2))
+                # sum_sinSqg = 0.5*(-2.0*asin(nu/(abs(v2p)*sinI))/pi + 2.0/pi*(nu/(abs(v2p)*sinI))*sqrt(1.0-(nu/(abs(v2p)*sinI))^2))
+                sum_sinSqg = 0.5*(sum_g + 2.0/pi*(nu/(abs(v2p)*sinI))*sqrt(1.0-(nu/(abs(v2p)*sinI))^2))
             end
         end
 
@@ -144,12 +135,13 @@ function orbit_average!(list_coeffs_block::CuDeviceArray{T}, E::Float64, L::Floa
         list_coeffs_threads[tid,8] += jac_loc * (rloc^2*cosI*(vt_v^2*dvPar2 + 0.5*vr_v^2*dvPerp2))
         list_coeffs_threads[tid,9] += jac_loc * (rloc*vt*cosI*dvPar2)
 
-
+  
         # Increment index
 
         index += blockDim().x * gridDim().x
 
     end
+
 
     sync_threads()
 

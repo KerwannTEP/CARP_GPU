@@ -59,6 +59,11 @@ function flux2D_JrL(Jr::Float64, L::Float64, cosI::Float64, m_field::Float64,
     return fluxJr, fluxL
 end
 
+
+# https://cuda.juliagpu.org/stable/usage/multitasking/
+# https://stackoverflow.com/questions/61905127/what-is-the-difference-between-threads-spawn-and-threads-threads
+# https://stackoverflow.com/questions/55447363/julia-spawn-computing-jobs-sequentially-instead-of-parallel
+
 # Computes the 2D-diffusion rate dF/dt in (Jr,L) space
 function dFdt2D_JrL(Jr::Float64, L::Float64, m_field::Float64,
             alpha::Float64=alphaRot, nbCosI::Int64=50, nbAvr::Int64=nbAvr_default,
@@ -69,7 +74,12 @@ function dFdt2D_JrL(Jr::Float64, L::Float64, m_field::Float64,
     sumJr = 0.0
     sumL = 0.0
 
-    for i=1:nbCosI
+
+    sumJr_t = zeros(Float64, Threads.nthreads())
+    sumL_t = zeros(Float64, Threads.nthreads())
+
+
+    Threads.@threads for i=1:nbCosI
         cosI = -1.0 + 2.0/nbCosI*(i-0.5)
 
         fJr_p, _ = flux2D_JrL(Jr+eps,L,cosI,m_field,alpha,nbAvr,nbw,nbvartheta,nbphi,nbu,eps,m_test,hg_int)
@@ -82,9 +92,18 @@ function dFdt2D_JrL(Jr::Float64, L::Float64, m_field::Float64,
 
         dL = (fL_p-fL_m)/(2.0*eps)
 
-        sumJr += dJr
-        sumL  += dL
+        it = Threads.threadid()
+
+        sumJr_t[it] += dJr
+        sumL_t[it]  += dL
     end
+
+
+    for it=1:Threads.nthreads()
+
+        sumJr += sumJr_t[it]
+        sumL += sumL_t[it]   
+    end 
 
     sumJr *= 2.0/nbCosI
     sumL *= 2.0/nbCosI

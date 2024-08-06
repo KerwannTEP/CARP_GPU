@@ -38,8 +38,6 @@ function orbitAverageEnergyCoeffs(sp::Float64, sa::Float64, cosI::Float64,
                                                                                                                 m_field, alpha, nbAvr, nbw, nbvartheta,
                                                                                                                 nbphi, nint, nbThreadsPerBlocks, m_test, hg_int)
 
- 
-
     list_coeffs_block = Array(dev_list_coeffs_block)
 
     for ib=1:numblocks
@@ -56,30 +54,18 @@ function orbitAverageEnergyCoeffs(sp::Float64, sa::Float64, cosI::Float64,
 
     end
     
+    halfperiod = 0.0
 
-    halfperiod_threads = zeros(Float64, Threads.nthreads())
 
-    Threads.@threads for iu=1:nbAvr
-
-        ithread = Threads.threadid()
+    for iu=1:nbAvr
 
         uloc = -1+2*(iu-0.5)/nbAvr
         jac_loc = Theta(uloc,sp,sa)
 
         
-        halfperiod_threads[ithread] += jac_loc
+        halfperiod += jac_loc
 
     end
-
-    halfperiod = 0.0
-
-    for it=1:Threads.nthreads()
-
-        halfperiod += halfperiod_threads[it]
-
-    end
-
-    # println(halfperiod)
 
     avrDE /= halfperiod
     avrDL /= halfperiod
