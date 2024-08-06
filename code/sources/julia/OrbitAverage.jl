@@ -8,7 +8,7 @@ function orbitAverageEnergyCoeffs(sp::Float64, sa::Float64, cosI::Float64,
 
 
     E, L = E_L_from_sp_sa(sp,sa)
-    Lz = L * cosI
+
     sma, ecc = sma_ecc_from_sp_sa(sp,sa)
     sinI = sqrt(abs(1.0 - cosI^2))
 
