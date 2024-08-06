@@ -33,6 +33,12 @@ tabargs = ArgParseSettings()
     help = "Number of sampling points for the 3D Rosenbluth integrals: vartheta-integral"
     arg_type = Int64
     default = 20
+    "--nbThreadsPerBlocks"
+    help = "Number of threads per blocks (GPU)"
+    arg_type = Int64
+    default = 1024
 
 end
 parsed_args = parse_args(tabargs)
+
+

@@ -44,6 +44,8 @@ const nbw_default = parsed_args["nbw"]
 const nbphi_default = parsed_args["nbphi"]
 const nbvartheta_default = parsed_args["nbvartheta"]
 
+const nbThreadsPerBlocks = parsed_args["nbThreadsPerBlocks"]
+
 ##################################################
 ##################################################
 
