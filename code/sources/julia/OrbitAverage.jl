@@ -33,13 +33,12 @@ function orbitAverageEnergyCoeffs(sp::Float64, sa::Float64, cosI::Float64,
 
     # https://cuda.juliagpu.org/stable/tutorials/introduction/
     
-    @cuda threads=nbThreadsPerBlocks blocks=numblocks shmem=nbThreadsPerBlocks*9*sizeof(Float64) orbit_average!(dev_list_coeffs_block, E, L, Lz, _tFq0, cosI, sinI, sma, ecc, sp, sa, 
-                                                                    m_field, alpha, nbAvr, nbw, nbvartheta,
-                                                                    nbphi, nint, nbThreadsPerBlocks, m_test, hg_int)
+    @cuda threads=nbThreadsPerBlocks blocks=numblocks shmem=nbThreadsPerBlocks*9*sizeof(Float64) orbit_average!(dev_list_coeffs_block, E, L, 
+                                                                                                                cosI, sinI, sma, ecc, sp, sa, 
+                                                                                                                m_field, alpha, nbAvr, nbw, nbvartheta,
+                                                                                                                nbphi, nint, nbThreadsPerBlocks, m_test, hg_int)
 
-    # @cuda threads=nbThreadsPerBlocks blocks=numblocks shmem=nbThreadsPerBlocks*9*sizeof(Float64) orbit_average!(dev_list_coeffs_block, E, L, Lz, _F, cosI, sinI, sma, ecc, sp, sa, 
-    #                                                                 m_field, alpha, nbAvr, nbw, nbvartheta,
-    #                                                                 nbphi, nint, nbThreadsPerBlocks, m_test, hg_int)
+ 
 
     list_coeffs_block = Array(dev_list_coeffs_block)
 

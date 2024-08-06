@@ -73,119 +73,178 @@ const hg_int_default = HG_Interpolate_init_GPU()
 # Distribution function in (E,L) for a Plummer sphere
 ##################################################
 
-function _Hq1(hg_int::HG_Interpolate, x::Float64, q::Float64=qCalc)
-    if (x <= 1)
-        pref = 1/(GAMMA_ca)
-        HG   = H_1(hg_int,x)
-        return pref*HG
+# https://discourse.julialang.org/t/defining-function-inside-a-macro/9139/2
+# https://groups.google.com/g/julia-users/c/OEXxlaeZFoU
+
+macro make_H()
+
+    fn = Symbol("_H")
+
+    structn = HG_Interpolate
+    typef = Float64
+
+    if (qCalc == 1.0)
+
+        quote
+            function $(esc(fn))(hg_int::$structn, x::$typef)
+                
+                if (x <= 1)
+                    pref = 1/(GAMMA_ca)
+                    HG   = H_1(hg_int,x)
+                    return pref*HG
+                else
+                    pref = 1/(GAMMA_db*GAMMA_bc)
+                    HG   = H_2(hg_int,1/x)
+                    return pref*1/sqrt(x)*HG
+                end  
+                
+            end
+        end
+
+
+    elseif (qCalc == -6.0)
+
+        quote
+            function $(esc(fn))(hg_int::$structn, x::$typef)
+                
+                if (x <= 1)
+                    pref = 1/(GAMMA_ca)
+                    HG   = H_1(hg_int,x)
+                    return pref*HG
+                else
+                    pref = 1/(GAMMA_db*GAMMA_bc)
+                    HG   = H_2(hg_int,1/x)
+                    return pref*x^3*HG
+                end
+                
+            end
+        end
+
     else
-        pref = 1/(GAMMA_db*GAMMA_bc)
-        HG   = H_2(hg_int,1/x)
-        return pref*1/sqrt(x)*HG
-    end
-end
 
-function _Hqm6(hg_int::HG_Interpolate, x::Float64, q::Float64=qCalc)
-    if (x <= 1)
-        pref = 1/(GAMMA_ca)
-        HG   = H_1(hg_int,x)
-        return pref*HG
-    else
-        pref = 1/(GAMMA_db*GAMMA_bc)
-        HG   = H_2(hg_int,1/x)
-        return pref*x^3*HG
-    end
-end
+        quote
+            function $(esc(fn))(hg_int::$structn, x::$typef)
+                
+                if (x <= 1)
+                    pref = 1/(GAMMA_ca)
+                    HG   = H_1(hg_int,x)
+                    return pref*HG
+                else
+                    pref = 1/(GAMMA_db*GAMMA_bc)
+                    HG   = H_2(hg_int,1/x)
+                    return pref*x^(-qCalc/2)*HG
+                end
+                
+            end
+        end
 
-function _Hq(hg_int::HG_Interpolate, x::Float64, q::Float64=qCalc)
-    if (x <= 1)
-        pref = 1/(GAMMA_ca)
-        HG   = H_1(hg_int,x)
-        return pref*HG
-    else
-        pref = 1/(GAMMA_db*GAMMA_bc)
-        HG   = H_2(hg_int,1/x)
-        return pref*x^(-q/2)*HG
-    end
-end
-
-if (qCalc == 1.0)
-    const _H = _Hq1
-elseif (qCalc == -6.0)
-    const _H = _Hqm6
-else
-    const _H = _Hq
-end
-
-
-function _tFq0(tE::Float64, tL::Float64)
-    if (tE < 0.0) # If E or L are negative, the DF vanishes
-        return 0.0
-    end
-    return 3.0/(7.0*PI^3) * (2.0*tE)^(3)*sqrt(2.0*tE)
-
-end
-
-function _tFq2(tE::Float64, tL::Float64)
-    if (tE < 0.0 || tL < 0.0) # If E or L are negative, the DF vanishes
-        return 0.0
-    end
-    # If E and L are positive
-    x = tL^2/(2.0*tE)
-    if (x <= 1)
-        return 6.0/(2.0*PI)^3 * (2.0*tE - tL^2)^(3/2)
     end
 
-    return 0.0
 
 end
 
-function _tFq1(hg_int::HG_Interpolate, tE::Float64, tL::Float64)
-    if (tE < 0.0 || tL < 0.0) # If E or L are negative, the DF vanishes
-        return 0.0
+@make_H()
+
+
+macro make_tF()
+
+    fn = Symbol("_tF")
+
+    structn = HG_Interpolate
+    typef = Float64
+
+    if (qCalc == 0.0)
+
+        quote
+            function $(esc(fn))(hg_int::$structn, tE::$typef, tL::$typef)
+
+                if (tE < 0.0) # If E or L are negative, the DF vanishes
+                    return 0.0
+                end
+
+                return 3.0/(7.0*PI^3) * (2.0*tE)^(3)*sqrt(2.0*tE)
+                
+            end
+        end
+
+
+    elseif (qCalc == 2.0)
+
+        quote
+            function $(esc(fn))(hg_int::$structn, tE::$typef, tL::$typef)
+                
+                if (tE < 0.0 || tL < 0.0) # If E or L are negative, the DF vanishes
+                    return 0.0
+                end
+
+                # If E and L are positive
+                x = tL^2/(2.0*tE)
+                if (x <= 1)
+                    return 6.0/(2.0*PI)^3 * (2.0*tE - tL^2)^(3/2)
+                end
+            
+                return 0.0
+                
+            end
+        end
+
+
+    elseif (qCalc == 1.0)
+
+        quote
+            function $(esc(fn))(hg_int::$structn, tE::$typef, tL::$typef)
+                
+                if (tE < 0.0 || tL < 0.0) # If E or L are negative, the DF vanishes
+                    return 0.0
+                end
+
+                # If E and L are positive
+                x = tL^2/(2.0*tE)
+                return (3.0*GAMMA_6q/(2.0*(2.0*PI)^(5/2)) *
+                           tE*tE*sqrt(tE) * _H(hg_int,x))
+                
+            end
+        end
+
+    elseif (qCalc == -6.0)
+
+        quote
+            function $(esc(fn))(hg_int::$structn, tE::$typef, tL::$typef)
+                
+                if (tE < 0.0 || tL < 0.0) # If E or L are negative, the DF vanishes
+                    return 0.0
+                end
+                # If E and L are positive
+                x = tL^2/(2.0*tE)
+                return (3.0*GAMMA_6q/(2.0*(2.0*PI)^(5/2)) *
+                           tE^2*tE^2*tE^2*tE^2*tE*sqrt(tE) * _H(hg_int,x))
+                
+            end
+        end
+
+    else 
+
+        quote
+            function $(esc(fn))(hg_int::$structn, tE::$typef, tL::$typef)
+                
+                if (tE < 0.0 || tL < 0.0) # If E or L are negative, the DF vanishes
+                    return 0.0
+                end
+                # If E and L are positive
+                x = tL^2/(2.0*tE)
+                return (3.0*GAMMA_6q/(2.0*(2.0*PI)^(5/2)) *
+                           tE^(3.5-qCalc) * _H(hg_int,x))
+                
+            end
+        end
+
     end
-    # If E and L are positive
-    x = tL^2/(2.0*tE)
-    return (3.0*GAMMA_6q/(2.0*(2.0*PI)^(5/2)) *
-               tE*tE*sqrt(tE) * _H(hg_int,x,1.0))
 
 
 end
 
-function _tFqm6(hg_int::HG_Interpolate, tE::Float64, tL::Float64)
-    if (tE < 0.0 || tL < 0.0) # If E or L are negative, the DF vanishes
-        return 0.0
-    end
-    # If E and L are positive
-    x = tL^2/(2.0*tE)
-    return (3.0*GAMMA_6q/(2.0*(2.0*PI)^(5/2)) *
-               tE^2*tE^2*tE^2*tE^2*tE*sqrt(tE) * _H(hg_int,x,-6.0))
+@make_tF()
 
-end
-
-function _tFq(hg_int::HG_Interpolate, tE::Float64, tL::Float64)
-    if (tE < 0.0 || tL < 0.0) # If E or L are negative, the DF vanishes
-        return 0.0
-    end
-    # If E and L are positive
-    x = tL^2/(2.0*tE)
-    return (3.0*GAMMA_6q/(2.0*(2.0*PI)^(5/2)) *
-               tE^(3.5-qCalc) * _H(hg_int,x,qCalc))
-
-end
-
-
-if (qCalc == 0.0)
-    const _tF = _tFq0
-elseif (qCalc == 2.0)
-    const _tF = _tFq2
-elseif (qCalc == 1.0)
-    const _tF = _tFq1
-elseif (qCalc == -6.0)
-    const _tF = _tFqm6
-else
-    const _tF = _tFq
-end
 
 function _F(hg_int::HG_Interpolate, E::Float64, L::Float64)
     tE = _tE(E)
@@ -212,64 +271,3 @@ function _Frot_cosI(hg_int::HG_Interpolate, E::Float64, L::Float64, cosI::Float6
     Frot = L*Ftot*(1.0 + alpha*sign(cosI))
     return Frot
 end
-
-##################################################
-# Interpolate the hypergeometric function
-# HG1   = _₂F₁(qCalc/2,qCalc-3.5,1.0,x)
-# HG2   = _₂F₁(qCalc/2,qCalc/2,4.5-qCalc/2,1/x)
-
-# valeur en x=1: https://homepage.tudelft.nl/11r49/documents/wi4006/hyper.pdf equation 4
-# 2F1(a,b,c,1) = gamma(c)gamma(c-a-b)/(gamma(c-a)gamma(c-b))
-
-# Valeur en x=1
-# HG1   = _₂F₁(qCalc/2,qCalc-3.5,1.0,1) = gamma(4.5-1.5*qCalc)/(gamma(1-qCalc/2)gamma(4.5-qCalc))
-# HG2   = _₂F₁(qCalc/2,qCalc/2,4.5-qCalc/2,1) = gamma(4.5-qCalc/2)gamma(4.5-1.5*qCalc)/(gamma(4.5-qCalc)gamma(4.5-qCalc))
-##################################################
-
-# function getHGInt(nbxInt::Int64=1000)
-#     xminInt = 0.0
-#     xmaxInt = 1.0
-#     #####
-#     rangexInt = range(xminInt,length=nbxInt,xmaxInt)
-#     tabxInt = collect(rangexInt)
-#     tabHG1Int = zeros(Float64,nbxInt)
-#     tabHG2Int = zeros(Float64,nbxInt)
-
-#     #####
-#     for indx=2:nbxInt-1
-#         xloc = tabxInt[indx]
-#         hg1loc = _₂F₁(qCalc/2,qCalc-3.5,1.0,xloc)
-#         hg2loc = _₂F₁(qCalc/2,qCalc/2,4.5-qCalc/2,xloc)
-#         tabHG1Int[indx] = hg1loc
-#         tabHG2Int[indx] = hg2loc
-#     end
-#     # x=0
-#     tabHG1Int[1] = 1.0
-#     tabHG2Int[1] = 1.0
-
-#     # x=1
-#     tabHG1Int[nbxInt] = gamma(4.5-1.5*qCalc)/(gamma(1-qCalc/2)*gamma(4.5-qCalc))
-#     tabHG2Int[nbxInt] = gamma(4.5-qCalc/2)*gamma(4.5-1.5*qCalc)/(gamma(4.5-qCalc)*gamma(4.5-qCalc))
-#     #####
-#     intHG1 = Interpolations.scale(interpolate(tabHG1Int, BSpline(Cubic(Line(OnGrid())))),rangexInt)
-#     intHG2 = Interpolations.scale(interpolate(tabHG2Int, BSpline(Cubic(Line(OnGrid())))),rangexInt)
-#     #####
-#     return [intHG1, intHG2]
-# end
-
-
-# const tabHyperGeoInt = SVector{2}(getHGInt())
-
-# # HG1   = _₂F₁(qCalc/2,qCalc-3.5,1.0,x)`
-# const H_1 = tabHyperGeoInt[1]
-
-
-
-# # HG2   = _₂F₁(qCalc/2,qCalc/2,4.5-qCalc/2,1/x)`
-# const H_2 = tabHyperGeoInt[2]
-
-
-
-
-
-

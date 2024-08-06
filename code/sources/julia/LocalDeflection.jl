@@ -1,4 +1,4 @@
-function orbit_average!(list_coeffs_block::CuDeviceArray{T}, E::Float64, L::Float64, Lz::Float64, dev_F, cosI::Float64, 
+function orbit_average!(list_coeffs_block::CuDeviceArray{T}, E::Float64, L::Float64, cosI::Float64, 
                         sinI::Float64, sma::Float64, ecc::Float64, sp::Float64, sa::Float64, 
                         m_field::Float64, alpha::Float64, nbAvr::Int64, nbw::Int64, nbvartheta::Int64,
                         nbphi::Int64, nint::Int64, nbThreadsPerBlocks::Int64, m_test::Float64, hg_int::HG_Interpolate) where T
@@ -104,9 +104,9 @@ function orbit_average!(list_coeffs_block::CuDeviceArray{T}, E::Float64, L::Floa
 
 
         # Ftot = dev_F(-Ep,Lp) 
-        Ftot = dev_F(-Ep,Lp) 
+        # Ftot = dev_F(-Ep,Lp) 
 
-        # Ftot = _F(hg_int,Ep,Lp)
+        Ftot = _F(hg_int,Ep,Lp)
 
 
         nu = -(v1p*vt_v-v3p*vr_v)*cosI
